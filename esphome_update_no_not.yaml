@@ -4,21 +4,15 @@ automation:
       - platform: time
         at: "01:00:00"
     action:
-      - service: script.aggiorna_dispositivi_esphome  # Corretto il nome del servizio
-################################################################################
-################################################################################
-input_text:
-  esphome_aggiornati:
-    name: "ESPHome Aggiornati"
-    initial: ""
-    max: 1000
-  
-  esphome_falliti:
-    name: "ESPHome Falliti" 
-    initial: ""
-    max: 1000
-################################################################################
-################################################################################
+      - service: script.aggiorna_dispositivi_esphome
+
+
+
+
+
+
+
+
 script:
   aggiorna_dispositivi_esphome:
     alias: "🔄 Aggiorna dispositivi ESPHome"
@@ -44,14 +38,14 @@ script:
           
           entita_da_aggiornare: "{{ dispositivi_esphome + esphome_addon }}"
       
-      # Interrompi se non ci sono aggiornamenti disponibili
+      # Se non ci sono aggiornamenti, interrompi lo script
       - condition: template
         value_template: "{{ entita_da_aggiornare | length > 0 }}"
       
-      - alias: "📋 Inizializza variabili per i risultati"
+      - alias: "📋 Prepara liste per i risultati"
         variables:
-          aggiornati: []
-          falliti: []
+          aggiornati_temp: []
+          falliti_temp: []
       
       - alias: "🔁 Esegui aggiornamenti in sequenza"
         repeat:
@@ -71,79 +65,30 @@ script:
               timeout: "00:03:00"
               continue_on_timeout: true
             
-            # Usa input_text helper per memorizzare i risultati
             - choose:
                 - conditions:
                     - condition: template
                       value_template: "{{ is_state(dispositivo_corrente, 'off') }}"
                   sequence:
-                    - service: input_text.set_value
-                      target:
-                        entity_id: input_text.esphome_aggiornati
-                      data:
-                        value: >
-                          {% set current = states('input_text.esphome_aggiornati') %}
-                          {% if current == 'unknown' or current == '' %}
-                            {{ nome_dispositivo }}
-                          {% else %}
-                            {{ current + ',' + nome_dispositivo }}
-                          {% endif %}
+                    - variables:
+                        aggiornati_temp: "{{ aggiornati_temp + [nome_dispositivo] }}"
               default:
-                - service: input_text.set_value
-                  target:
-                    entity_id: input_text.esphome_falliti
-                  data:
-                    value: >
-                      {% set current = states('input_text.esphome_falliti') %}
-                      {% if current == 'unknown' or current == '' %}
-                        {{ nome_dispositivo }}
-                      {% else %}
-                        {{ current + ',' + nome_dispositivo }}
-                      {% endif %}
+                - variables:
+                    falliti_temp: "{{ falliti_temp + [nome_dispositivo] }}"
             
             - delay: "00:00:05"
       
       - alias: "📱 Invia notifica finale"
-        variables:
-          aggiornati_lista: >
-            {% set aggiornati_str = states('input_text.esphome_aggiornati') %}
-            {% if aggiornati_str not in ['unknown', ''] %}
-              {{ aggiornati_str.split(',') }}
-            {% else %}
-              []
+        service: notify.my_phone ###################### Cambia con il tuo servizio di notifica
+        data:
+          title: "🔄 Aggiornamento ESPHome"
+          message: >
+            {% if aggiornati_temp %}
+              ✅ Aggiornati con successo:
+              {{ aggiornati_temp | join('\n') }}
             {% endif %}
-          falliti_lista: >
-            {% set falliti_str = states('input_text.esphome_falliti') %}
-            {% if falliti_str not in ['unknown', ''] %}
-              {{ falliti_str.split(',') }}
-            {% else %}
-              []
+            {% if falliti_temp %}
+              {% if aggiornati_temp %}{{ '\n' }}{% endif %}
+              ❌ Falliti:
+              {{ falliti_temp | join('\n') }}
             {% endif %}
-        sequence:
-          - service: notify.my_phone #cambia con il tuo servizio di notifica
-            data:
-              title: "🔄 Aggiornamento ESPHome"
-              message: >
-                {% if aggiornati_lista %}
-                  ✅ Aggiornati con successo:
-                  {{ aggiornati_lista | join('\n') }}
-                {% endif %}
-                {% if falliti_lista %}
-                  {% if aggiornati_lista %}{{ '\n' }}{% endif %}
-                  ❌ Falliti:
-                  {{ falliti_lista | join('\n') }}
-                {% endif %}
-################################################################################
-################################################################################
-          # Pulisci gli helper dopo l'uso
-          - service: input_text.set_value
-            target:
-              entity_id: input_text.esphome_aggiornati
-            data:
-              value: ""
-          
-          - service: input_text.set_value
-            target:
-              entity_id: input_text.esphome_falliti
-            data:
-              value: ""
